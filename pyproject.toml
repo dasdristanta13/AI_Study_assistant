@@ -1,0 +1,23 @@
+[project]
+name = "ai-study-assistant"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "firecrawl-py",
+    "gradio==4.19.2",
+    "langchain",
+    "langchain-community",
+    "langchain-openai",
+    "langgraph",
+    "mlflow==2.10.2",
+    "pydantic",
+    "pypdf==4.0.1",
+    "python-docx==1.1.0",
+    "python-dotenv==1.0.1",
+    "python-magic==0.4.27",
+    "tavily-python",
+    "tiktoken",
+    "unstructured==0.12.4",
+]

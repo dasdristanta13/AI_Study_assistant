@@ -1,0 +1,26 @@
+# Core LangChain and LangGraph
+langchain
+langchain-openai
+langgraph
+langchain-community
+
+# Document Processing
+pypdf==4.0.1
+python-docx==1.1.0
+unstructured==0.12.4
+python-magic==0.4.27
+
+# Web Search Tools
+tavily-python
+firecrawl-py
+
+# MLflow for tracking
+mlflow==2.10.2
+
+# UI Framework
+gradio==4.19.2
+
+# Utilities
+python-dotenv==1.0.1
+pydantic
+tiktoken
