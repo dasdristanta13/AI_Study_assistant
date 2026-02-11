@@ -389,7 +389,7 @@ class StudyAssistantUI:
                 **Tips:**
                 - For best results, provide focused study material
                 - Use web search for current topics
-                - Check MLflow UI for experiment tracking: `mlflow ui`
+
                 """
             )
         

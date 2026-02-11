@@ -3,18 +3,19 @@ LangGraph Agent - AI Study Assistant
 Main agent workflow with state management
 """
 import os
+import asyncio
 from typing import Dict, Any
 from datetime import datetime
 import time
 
 from langgraph.graph import StateGraph, END
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from config import AgentState, Config, StudyMaterial, QuizQuestion
 from document_processor import DocumentProcessor, validate_file_path
 from web_search import WebSearcher, URLContentExtractor
 from llm_chains import SummarizationChain, QuizGenerationChain
-from mlflow_tracker import MLflowTracker
+from tracing import TracingManager
 
 
 class StudyAssistantAgent:
@@ -30,7 +31,9 @@ class StudyAssistantAgent:
         self.url_extractor = URLContentExtractor()
         self.summarizer = SummarizationChain(openai_api_key)
         self.quiz_generator = QuizGenerationChain(openai_api_key)
-        self.mlflow_tracker = MLflowTracker()
+        
+        # Initialize tracing
+        self.tracing_manager = TracingManager()
         
         # Build the graph
         self.graph = self._build_graph()
@@ -43,17 +46,15 @@ class StudyAssistantAgent:
         # Add nodes
         workflow.add_node("load_content", self.load_content_node)
         workflow.add_node("process_documents", self.process_documents_node)
-        workflow.add_node("generate_summary", self.generate_summary_node)
-        workflow.add_node("extract_key_points", self.extract_key_points_node)
+        workflow.add_node("analyze_content", self.analyze_content_node)
         workflow.add_node("generate_quiz", self.generate_quiz_node)
         workflow.add_node("finalize", self.finalize_node)
         
         # Define edges
         workflow.set_entry_point("load_content")
         workflow.add_edge("load_content", "process_documents")
-        workflow.add_edge("process_documents", "generate_summary")
-        workflow.add_edge("generate_summary", "extract_key_points")
-        workflow.add_edge("extract_key_points", "generate_quiz")
+        workflow.add_edge("process_documents", "analyze_content")
+        workflow.add_edge("analyze_content", "generate_quiz")
         workflow.add_edge("generate_quiz", "finalize")
         workflow.add_edge("finalize", END)
         
@@ -159,41 +160,10 @@ class StudyAssistantAgent:
         
         return state
     
-    def generate_summary_node(self, state: AgentState) -> AgentState:
-        """Node: Generate summary of content"""
-        state["current_step"] = "generating_summary"
-        state["messages"].append("Generating summary...")
-        
-        try:
-            # Combine content from all study materials
-            content = "\n\n".join([
-                material.content for material in state["study_materials"]
-            ])
-            
-            # Limit content length for summarization
-            if len(content) > 8000:
-                content = content[:8000] + "..."
-            
-            # Generate summary
-            summary = self.summarizer.summarize_content(
-                content,
-                max_length=Config.MAX_SUMMARY_LENGTH
-            )
-            
-            state["summary"] = summary
-            state["messages"].append(f"✓ Summary generated ({len(summary)} chars)")
-            
-        except Exception as e:
-            state["error"] = str(e)
-            state["messages"].append(f"✗ Error generating summary: {str(e)}")
-            state["summary"] = "Summary generation failed."
-        
-        return state
-    
-    def extract_key_points_node(self, state: AgentState) -> AgentState:
-        """Node: Extract key points from content"""
-        state["current_step"] = "extracting_key_points"
-        state["messages"].append("Extracting key points...")
+    async def analyze_content_node(self, state: AgentState) -> AgentState:
+        """Node: Analyze content (Summary + Key Points) in parallel"""
+        state["current_step"] = "analyzing_content"
+        state["messages"].append("Generating summary and extracting key points...")
         
         try:
             # Combine content from all study materials
@@ -205,20 +175,33 @@ class StudyAssistantAgent:
             if len(content) > 8000:
                 content = content[:8000] + "..."
             
-            # Extract key points
-            key_points = self.summarizer.extract_key_points(content, num_points=10)
+            # Define tasks
+            summary_task = self.summarizer.summarize_content(
+                content,
+                max_length=Config.MAX_SUMMARY_LENGTH
+            )
             
+            key_points_task = self.summarizer.extract_key_points(
+                content,
+                num_points=10
+            )
+            
+            # Run in parallel
+            summary, key_points = await asyncio.gather(summary_task, key_points_task)
+            
+            state["summary"] = summary
             state["key_points"] = key_points
-            state["messages"].append(f"✓ Extracted {len(key_points)} key points")
+            state["messages"].append(f"✓ Analysis complete: Summary ({len(summary)} chars) & {len(key_points)} Key Points")
             
         except Exception as e:
             state["error"] = str(e)
-            state["messages"].append(f"✗ Error extracting key points: {str(e)}")
+            state["messages"].append(f"✗ Error analyzing content: {str(e)}")
+            state["summary"] = "Summary generation failed."
             state["key_points"] = []
         
         return state
     
-    def generate_quiz_node(self, state: AgentState) -> AgentState:
+    async def generate_quiz_node(self, state: AgentState) -> AgentState:
         """Node: Generate quiz questions"""
         state["current_step"] = "generating_quiz"
         state["messages"].append("Generating quiz questions...")
@@ -231,7 +214,7 @@ class StudyAssistantAgent:
             difficulty = state.get("difficulty_level", "mixed")
             
             # Generate quiz questions
-            questions = self.quiz_generator.generate_quiz_questions(
+            questions = await self.quiz_generator.generate_quiz_questions(
                 content=content,
                 key_points=key_points,
                 num_questions=num_questions,
@@ -262,18 +245,14 @@ class StudyAssistantAgent:
         
         return state
     
-    def run(
+    async def run(
         self,
         input_type: str,
         input_data: str,
         num_questions: int = 5,
         difficulty_level: str = "mixed"
     ) -> Dict[str, Any]:
-        """Run the study assistant agent"""
-        
-        # Start MLflow run
-        run_id = self.mlflow_tracker.start_run()
-        start_time = time.time()
+        """Run the study assistant agent (Async)"""
         
         # Initialize state
         initial_state = {
@@ -288,47 +267,23 @@ class StudyAssistantAgent:
             "quiz_questions": [],
             "current_step": "initialized",
             "error": None,
-            "mlflow_run_id": run_id,
             "messages": []
         }
         
         try:
-            # Run the graph
-            final_state = self.graph.invoke(initial_state)
+            # Get tracing callbacks
+            callbacks = self.tracing_manager.get_callbacks()
             
-            # Calculate processing time
-            processing_time = time.time() - start_time
-            
-            # Log to MLflow
-            self.mlflow_tracker.log_study_session(
-                input_type=input_type,
-                num_questions=num_questions,
-                difficulty=difficulty_level,
-                processing_time=processing_time,
-                summary_length=len(final_state.get("summary", "")),
-                num_key_points=len(final_state.get("key_points", [])),
-                success=final_state.get("error") is None
+            # Run the graph with callbacks (async)
+            final_state = await self.graph.ainvoke(
+                initial_state,
+                config={"callbacks": callbacks} if callbacks else None
             )
             
-            # Log artifacts
-            self.mlflow_tracker.log_text(
-                final_state.get("summary", ""),
-                "summary.txt"
-            )
-            self.mlflow_tracker.log_dict(
-                {"key_points": final_state.get("key_points", [])},
-                "key_points.json"
-            )
-            self.mlflow_tracker.log_dict(
-                {"questions": [q.dict() for q in final_state.get("quiz_questions", [])]},
-                "quiz_questions.json"
-            )
-            
-            # End MLflow run
-            self.mlflow_tracker.end_run(status="FINISHED")
+            # Flush traces if needed
+            self.tracing_manager.flush()
             
             return final_state
             
         except Exception as e:
-            self.mlflow_tracker.end_run(status="FAILED")
             raise e

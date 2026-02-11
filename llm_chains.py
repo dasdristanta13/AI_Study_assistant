@@ -3,9 +3,9 @@ LLM Chains for Summarization and Quiz Generation
 """
 from typing import List
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import Document
-from langchain.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.documents import Document
+from langchain_core.output_parsers import PydanticOutputParser
 
 from config import Config, QuizQuestion
 
@@ -20,7 +20,7 @@ class SummarizationChain:
             temperature=0.3,  # Lower temperature for more focused summaries
         )
     
-    def summarize_content(self, content: str, max_length: int = 500) -> str:
+    async def summarize_content(self, content: str, max_length: int = 500) -> str:
         """Generate a concise summary of the content"""
         
         prompt = ChatPromptTemplate.from_messages([
@@ -37,14 +37,14 @@ Summary:""")
         
         chain = prompt | self.llm
         
-        response = chain.invoke({
+        response = await chain.ainvoke({
             "content": content,
             "max_length": max_length
         })
         
         return response.content
     
-    def extract_key_points(self, content: str, num_points: int = 10) -> List[str]:
+    async def extract_key_points(self, content: str, num_points: int = 10) -> List[str]:
         """Extract key points from the content"""
         
         prompt = ChatPromptTemplate.from_messages([
@@ -62,7 +62,7 @@ Provide the key points as a numbered list.""")
         
         chain = prompt | self.llm
         
-        response = chain.invoke({
+        response = await chain.ainvoke({
             "content": content,
             "num_points": num_points
         })
@@ -91,7 +91,7 @@ class QuizGenerationChain:
         )
         self.parser = PydanticOutputParser(pydantic_object=QuizQuestion)
     
-    def generate_quiz_questions(
+    async def generate_quiz_questions(
         self,
         content: str,
         key_points: List[str],
@@ -140,7 +140,7 @@ Return each question in the specified JSON format, one per line.""")
         
         chain = prompt | self.llm
         
-        response = chain.invoke({
+        response = await chain.ainvoke({
             "content": content,
             "key_points": key_points_text,
             "num_questions": num_questions,

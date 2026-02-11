@@ -39,10 +39,9 @@ class AgentState(TypedDict):
     difficulty_level: str  # 'easy', 'medium', 'hard', 'mixed'
     quiz_questions: Annotated[List[QuizQuestion], add]
     
-    # Metadata and tracking
+    # Metadata
     current_step: str
     error: Optional[str]
-    mlflow_run_id: Optional[str]
     
     # Messages for conversation
     messages: Annotated[List[str], add]
@@ -66,8 +65,8 @@ class Config:
     DEFAULT_NUM_QUESTIONS = 5
     QUESTION_TYPES = ["multiple_choice", "true_false", "short_answer"]
     
-    # MLflow Settings
-    EXPERIMENT_NAME = "ai-study-assistant"
+    # Tracing Settings
+    TRACING_ENABLED = False  # Set via env var LANGFUSE_TRACING_ENABLED usually, but we'll control logic via this or env
     
     # Supported file types
     SUPPORTED_FILE_TYPES = [".pdf", ".docx", ".txt", ".md"]

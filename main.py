@@ -64,7 +64,7 @@ def main():
         print(f"📍 Access the interface at: http://localhost:{args.port}")
         if args.share:
             print("🌐 Public share link will be generated...")
-        print("\n💡 To view MLflow tracking: mlflow ui")
+
         print("=" * 60)
         
         launch_ui(share=args.share, server_port=args.port)
@@ -125,8 +125,8 @@ def main():
             print(f"  Difficulty: {q.difficulty}")
         
         print("\n" + "=" * 60)
-        print(f"✅ Processing complete! MLflow run ID: {result.get('mlflow_run_id')}")
-        print("💡 View detailed metrics: mlflow ui")
+        print(f"✅ Processing complete!")
+
 
 
 if __name__ == "__main__":
