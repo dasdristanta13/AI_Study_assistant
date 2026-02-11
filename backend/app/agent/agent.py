@@ -11,11 +11,11 @@ import time
 from langgraph.graph import StateGraph, END
 from langchain_core.documents import Document
 
-from config import AgentState, Config, StudyMaterial, QuizQuestion
-from document_processor import DocumentProcessor, validate_file_path
-from web_search import WebSearcher, URLContentExtractor
-from llm_chains import SummarizationChain, QuizGenerationChain
-from tracing import TracingManager
+from app.core.config import AgentState, Config, StudyMaterial, QuizQuestion
+from app.services.document_processor import DocumentProcessor, validate_file_path
+from app.services.web_search import WebSearcher, URLContentExtractor
+from app.agent.llm_chains import SummarizationChain, QuizGenerationChain
+from app.core.tracing import TracingManager
 
 
 class StudyAssistantAgent:
@@ -24,20 +24,29 @@ class StudyAssistantAgent:
     def __init__(self, openai_api_key: str, tavily_api_key: str = None):
         self.openai_api_key = openai_api_key
         self.tavily_api_key = tavily_api_key
+        self.init_error = None
         
-        # Initialize components
-        self.doc_processor = DocumentProcessor()
-        self.web_searcher = WebSearcher(tavily_api_key) if tavily_api_key else None
-        self.url_extractor = URLContentExtractor()
-        self.summarizer = SummarizationChain(openai_api_key)
-        self.quiz_generator = QuizGenerationChain(openai_api_key)
-        
-        # Initialize tracing
-        self.tracing_manager = TracingManager()
-        
-        # Build the graph
-        self.graph = self._build_graph()
-    
+        try:
+            # Initialize components
+            self.doc_processor = DocumentProcessor()
+            self.web_searcher = WebSearcher(tavily_api_key) if tavily_api_key else None
+            self.url_extractor = URLContentExtractor()
+            
+            # These might fail if keys are invalid
+            self.summarizer = SummarizationChain(openai_api_key)
+            self.quiz_generator = QuizGenerationChain(openai_api_key)
+            
+            # Initialize tracing
+            self.tracing_manager = TracingManager()
+            
+            # Build the graph
+            self.graph = self._build_graph()
+            
+        except Exception as e:
+            print(f"Agent initialization warning: {e}")
+            self.init_error = str(e)
+            # We still allow the object to be created, but run() will fail gracefully
+
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph workflow"""
         
@@ -166,6 +175,9 @@ class StudyAssistantAgent:
         state["messages"].append("Generating summary and extracting key points...")
         
         try:
+            if not self.summarizer:
+                raise ValueError("Summarizer not initialized (Check OpenAI API Key)")
+
             # Combine content from all study materials
             content = "\n\n".join([
                 material.content for material in state["study_materials"]
@@ -207,6 +219,9 @@ class StudyAssistantAgent:
         state["messages"].append("Generating quiz questions...")
         
         try:
+            if not self.quiz_generator:
+                raise ValueError("Quiz generator not initialized (Check OpenAI API Key)")
+
             # Prepare content for quiz generation
             content = state.get("summary", state["raw_content"][:3000])
             key_points = state.get("key_points", [])
@@ -270,6 +285,12 @@ class StudyAssistantAgent:
             "messages": []
         }
         
+        # Check for initialization errors
+        if self.init_error:
+            initial_state["error"] = f"Agent initialization failed: {self.init_error}. Please check your API keys."
+            initial_state["messages"].append("❌ Agent is not fully initialized.")
+            return initial_state
+        
         try:
             # Get tracing callbacks
             callbacks = self.tracing_manager.get_callbacks()
@@ -286,4 +307,8 @@ class StudyAssistantAgent:
             return final_state
             
         except Exception as e:
-            raise e
+            # Gracefully handle runtime errors
+            print(f"Agent runtime error: {e}")
+            initial_state["error"] = f"Runtime error: {str(e)}"
+            initial_state["messages"].append(f"✗ Critical error during execution: {str(e)}")
+            return initial_state

@@ -5,7 +5,7 @@ Handles Langfuse integration for LangGraph tracing
 import os
 from typing import Optional, List
 from langfuse.langchain import CallbackHandler
-from config import Config
+from app.core.config import Config
 
 
 class TracingManager:

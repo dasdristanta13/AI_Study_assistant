@@ -28,12 +28,17 @@ class QuizQuestionResponse(BaseModel):
     difficulty: str
 
 
+class SourceModel(BaseModel):
+    title: str
+    type: str # "file", "url", "search"
+    content: Optional[str] = None
+
 class StudyResponse(BaseModel):
     """Response model for study session"""
     summary: str
     key_points: List[str]
     quiz: List[QuizQuestionResponse]
-    mlflow_run_id: Optional[str] = None # Keeping for compatibility if we re-enable or change tracking
+    sources: List[SourceModel] = []
     
     # We might want to include status messages or errors
     messages: List[str] = []

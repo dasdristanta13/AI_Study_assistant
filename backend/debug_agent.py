@@ -1,7 +1,7 @@
 import asyncio
 import os
 from dotenv import load_dotenv
-from agent import StudyAssistantAgent
+from app.agent.agent import StudyAssistantAgent
 
 load_dotenv()
 

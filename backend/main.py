@@ -6,7 +6,7 @@ import argparse
 from dotenv import load_dotenv
 
 from ui import launch_ui
-from agent import StudyAssistantAgent
+from app.agent.agent import StudyAssistantAgent
 
 
 def main():

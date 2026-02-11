@@ -10,9 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
-from agent import StudyAssistantAgent
-from models import StudyRequest, StudyResponse, QuizQuestionResponse
-from config import QuizQuestion
+from app.agent.agent import StudyAssistantAgent
+from app.core.models import StudyRequest, StudyResponse, QuizQuestionResponse, SourceModel
+from app.core.config import QuizQuestion
 
 # Load environment variables
 load_dotenv()
@@ -39,6 +39,10 @@ async def startup_event():
     
     if not openai_key:
         print("WARNING: OPENAI_API_KEY not found in environment variables.")
+    elif "your-openai-key" in openai_key:
+        print("❌ CRITICAL WARNING: OPENAI_API_KEY appears to be a placeholder. Please update backend/.env with your actual key.")
+        # We can optionally set agent to None or handle this gracefully
+
     
     # Initialize agent
     try:
@@ -133,10 +137,30 @@ def _format_response(result: dict) -> StudyResponse:
             elif isinstance(q, dict):
                  quiz_questions.append(QuizQuestionResponse(**q))
     
+    # Map sources
+    sources = []
+    if "study_materials" in result:
+        for mat in result["study_materials"]:
+            # Determine type based on source string or internal logic
+            source_type = "text"
+            if "http" in mat.source:
+                source_type = "url"
+            elif "search:" in mat.source:
+                source_type = "search"
+            elif os.path.exists(mat.source):
+                source_type = "file"
+                
+            sources.append(SourceModel(
+                title=os.path.basename(mat.source) if source_type == "file" else mat.source,
+                type=source_type,
+                content=mat.content[:200] + "..." # Preview
+            ))
+
     return StudyResponse(
         summary=result.get("summary", ""),
         key_points=result.get("key_points", []),
         quiz=quiz_questions,
+        sources=sources,
         messages=result.get("messages", []),
         error=result.get("error")
     )

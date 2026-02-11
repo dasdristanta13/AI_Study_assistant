@@ -7,8 +7,8 @@ import os
 from typing import Tuple, List
 from dotenv import load_dotenv
 
-from agent import StudyAssistantAgent
-from config import QuizQuestion
+from app.agent.agent import StudyAssistantAgent
+from app.core.config import QuizQuestion
 
 # Load environment variables
 load_dotenv()

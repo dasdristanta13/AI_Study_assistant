@@ -15,7 +15,7 @@ from langchain_community.document_loaders import (
 )
 from langchain_core.documents import Document
 
-from config import Config
+from app.core.config import Config
 
 
 class DocumentProcessor:
